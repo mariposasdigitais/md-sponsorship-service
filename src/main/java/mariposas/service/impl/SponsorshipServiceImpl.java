@@ -7,6 +7,7 @@ import jakarta.inject.Singleton;
 import jakarta.transaction.Transactional;
 import mariposas.exception.BaseException;
 import mariposas.model.MenteesModel;
+import mariposas.model.MentorModel;
 import mariposas.model.MentorshipEntity;
 import mariposas.model.PaginatedMentees;
 import mariposas.model.ResponseModel;
@@ -16,20 +17,22 @@ import mariposas.repository.MentorsRepository;
 import mariposas.repository.MentorshipRepository;
 import mariposas.repository.UserRepository;
 import mariposas.service.S3Service;
-import mariposas.service.UserService;
+import mariposas.service.SponsorshipService;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
+import static mariposas.constant.AppConstant.GET_MENTOR_ERROR;
 import static mariposas.constant.AppConstant.SPONSORSHIP_CANCEL_ERROR;
 import static mariposas.constant.AppConstant.SPONSORSHIP_CANCEL_SUCCESS;
 import static mariposas.constant.AppConstant.SPONSORSHIP_ERROR;
 import static mariposas.constant.AppConstant.SPONSORSHIP_SUCCESS;
 import static mariposas.constant.AppConstant.USERS_NOT_FOUND;
+import static mariposas.constant.AppConstant.USER_NOT_FOUND;
 
 @Singleton
-public class UserServiceImpl implements UserService {
+public class SponsorshipServiceImpl implements SponsorshipService {
     private final UserRepository userRepository;
     private final MentorsRepository mentorsRepository;
     private final MenteesRepository menteesRepository;
@@ -37,11 +40,11 @@ public class UserServiceImpl implements UserService {
     private final S3Service s3Service;
 
 
-    public UserServiceImpl(UserRepository userRepository,
-                           MentorsRepository mentorsRepository,
-                           MenteesRepository menteesRepository,
-                           MentorshipRepository mentorshipRepository,
-                           S3Service s3Service) {
+    public SponsorshipServiceImpl(UserRepository userRepository,
+                                  MentorsRepository mentorsRepository,
+                                  MenteesRepository menteesRepository,
+                                  MentorshipRepository mentorshipRepository,
+                                  S3Service s3Service) {
 
         this.userRepository = userRepository;
         this.mentorsRepository = mentorsRepository;
@@ -143,6 +146,30 @@ public class UserServiceImpl implements UserService {
 
         } catch (Exception e) {
             throw new BaseException(HttpStatus.UNPROCESSABLE_ENTITY, SPONSORSHIP_CANCEL_ERROR);
+        }
+    }
+
+    @Transactional
+    @Override
+    public MentorModel getMentorProfile(String email) {
+        try {
+            var existingMentee = userRepository.findByEmail(email);
+
+            if (existingMentee == null) {
+                throw new BaseException(HttpStatus.UNPROCESSABLE_ENTITY, USER_NOT_FOUND);
+            }
+
+            var mentee = menteesRepository.findByUserId(existingMentee);
+            var mentor = mentorsRepository.findMentorByMenteeId(mentee.getId());
+
+            var filename = new String(mentor.getImage());
+            var imageBytes = s3Service.getImageFile(filename);
+            mentor.setImage(imageBytes);
+
+            return mentor;
+
+        } catch (Exception e) {
+            throw new BaseException(HttpStatus.UNPROCESSABLE_ENTITY, GET_MENTOR_ERROR);
         }
     }
 
